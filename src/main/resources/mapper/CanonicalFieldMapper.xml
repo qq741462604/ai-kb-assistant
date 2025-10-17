@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.aiassistant.mapper.CanonicalFieldMapper">
+
+    <resultMap id="CanonicalFieldResultMap" type="com.aiassistant.domain.CanonicalField">
+        <id property="id" column="id"/>
+        <result property="canonicalField" column="canonical_field"/>
+        <result property="description" column="description"/>
+        <result property="aliases" column="aliases" javaType="java.util.List"
+                typeHandler="com.aiassistant.common.JsonArrayTypeHandler"/>
+    </resultMap>
+
+    <select id="listAll" resultMap="CanonicalFieldResultMap">
+        SELECT id, canonical_field, description, aliases FROM canonical_field_mapping
+    </select>
+
+    <!-- 查询所有字段 -->
+    <select id="selectAll" resultType="com.aiassistant.domain.CanonicalField">
+        SELECT
+            id,
+            canonical_field AS canonicalField,
+            aliases AS aliases,
+            description,
+            source,
+            confidence,
+            created_by AS createdBy,
+            status
+        FROM kb_info
+    </select>
+
+    <!-- 根据 canonicalName 查询 -->
+    <select id="selectByCanonicalName" parameterType="String" resultType="com.aiassistant.domain.CanonicalField">
+        SELECT
+            id,
+            canonical_field AS canonicalField,
+            aliases AS aliases,
+            description,
+            source,
+            confidence,
+            created_by AS createdBy,
+            status
+        FROM kb_info
+        WHERE canonical_field = #{canonicalField}
+    </select>
+
+    <!-- 插入 -->
+    <insert id="insert" parameterType="com.aiassistant.domain.CanonicalField" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_info
+        (canonical_field, aliases, description, source, confidence, created_by, status)
+        VALUES
+            (#{canonicalField},
+             #{aliases, typeHandler=com.aiassistant.handler.ListToJsonTypeHandler},
+             #{description},
+             #{source},
+             #{confidence},
+             #{createdBy},
+             #{status})
+    </insert>
+
+    <!-- 更新 -->
+    <update id="update" parameterType="com.aiassistant.domain.CanonicalField">
+        UPDATE kb_info
+        SET
+            aliases = #{aliases, typeHandler=com.aiassistant.handler.ListToJsonTypeHandler},
+            description = #{description},
+            source = #{source},
+            confidence = #{confidence},
+            created_by = #{createdBy},
+            status = #{status}
+        WHERE canonical_field = #{canonicalField}
+    </update>
+
+</mapper>

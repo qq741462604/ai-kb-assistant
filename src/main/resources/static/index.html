@@ -1,0 +1,70 @@
+<body>
+<div>
+    <table id="pendingTable">
+        <!-- 数据通过 JS 动态渲染 -->
+    </table>
+
+    <div id="pagination">
+        <!-- 分页按钮 -->
+    </div>
+
+    <button onclick="handleBatchApprove()">批量通过</button>
+</div>
+
+<script src="./support.js"></script>
+<script>
+    let currentPage = 1;
+    let pageSize = 10;
+
+    async function loadPendingPage(page) {
+        currentPage = page;
+        const data = await apiGet(`/field/pending/page?pageNum=${page}&pageSize=${pageSize}`);
+        renderTable(data.records);
+        renderPagination(data.total, page);
+    }
+
+    function renderTable(records) {
+        let html = `
+      <tr>
+        <th><input type="checkbox" onclick="toggleAll(this)"></th>
+        <th>ID</th>
+        <th>原字段</th>
+        <th>AI规范字段</th>
+        <th>置信度</th>
+      </tr>
+    `;
+        records.forEach(item => {
+            html += `
+        <tr>
+          <td><input type="checkbox" class="row-check" value="${item.id}"></td>
+          <td>${item.id}</td>
+          <td>${item.originalField}</td>
+          <td>${item.aiCanonicalField}</td>
+          <td>${item.confidence}</td>
+        </tr>
+      `;
+        });
+        document.getElementById('pendingTable').innerHTML = html;
+    }
+
+    function renderPagination(total, page) {
+        // TODO：分页按钮渲染（后续我可以补完整）
+    }
+
+    function toggleAll(checkbox) {
+        document.querySelectorAll('.row-check').forEach(c => c.checked = checkbox.checked);
+    }
+
+    function handleBatchApprove() {
+        const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.value));
+        if (ids.length === 0) {
+            alert('请先选择记录');
+            return;
+        }
+        batchApprove(ids);
+    }
+
+    // ✅ 首次加载
+    loadPendingPage(1);
+</script>
+</body>

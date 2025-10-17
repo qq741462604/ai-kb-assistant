@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>KB Pending 管理</title>
+    <style>
+        .high { background:#d4f7d4 } /* >=0.9 绿 */
+        .medium { background:#fff0d1 } /* 0.7-0.9 黄 */
+        .low { background:#f0f0f0 } /* <0.7 灰 */
+        table { border-collapse: collapse; width: 100% }
+        th, td { border: 1px solid #ccc; padding: 8px }
+        .btn { padding:6px 10px; margin:2px; cursor:pointer }
+        #modal { display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; border:1px solid #666; padding:20px; z-index:1000 }
+        #overlay { display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:999 }
+    </style>
+</head>
+<body>
+<h2>KB Pending 管理</h2>
+<div>
+    <button onclick="loadPending(1,20)" class="btn">刷新</button>
+    <button onclick="batchApprove()" class="btn">批量通过</button>
+</div>
+<table id="tbl">
+    <thead>
+    <tr>
+        <th><input id="chkAll" type="checkbox" onchange="toggleAll(this)"/></th>
+        <th>ID</th>
+        <th>原始字段</th>
+        <th>AI 建议</th>
+        <th>置信度</th>
+        <th>别名</th>
+        <th>状态</th>
+        <th>操作</th>
+    </tr>
+    </thead>
+    <tbody id="tbbody"></tbody>
+</table>
+
+<!-- 编辑 / 详情 Modal -->
+<div id="overlay"></div>
+<div id="modal">
+    <h3>编辑 AI 建议</h3>
+    <input type="hidden" id="m_id"/>
+    <div>
+        <label>原始字段: </label><span id="m_original"></span>
+    </div>
+    <div>
+        <label>Canonical: </label>
+        <input id="m_canonical" style="width:400px"/>
+    </div>
+    <div>
+        <label>Description: </label>
+        <input id="m_desc" style="width:400px"/>
+    </div>
+    <div>
+        <label>Aliases (JSON 数组格式): </label>
+        <input id="m_aliases" style="width:400px"/>
+    </div>
+    <div style="margin-top:10px">
+        <button onclick="saveEdits()" class="btn">保存</button>
+        <button onclick="approveWithEdits()" class="btn">保存并通过</button>
+        <button onclick="closeModal()" class="btn">取消</button>
+    </div>
+</div>
+<script src="./support.js"></script>
+<script>
+    let pendingList = [];
+    let checked = new Set();
+
+    function colorClass(conf) {
+        if (conf === null || conf === undefined) return 'low';
+        if (conf >= 0.9) return 'high';
+        if (conf >= 0.7) return 'medium';
+        return 'low';
+    }
+
+    function toggleAll(cb) {
+        const checkedFlag = cb.checked;
+        document.querySelectorAll('.chk').forEach(el => {
+            el.checked = checkedFlag;
+            const id = parseInt(el.dataset.id);
+            if (checkedFlag) checked.add(id); else checked.delete(id);
+        });
+    }
+
+    function toggleOne(el) {
+        const id = parseInt(el.dataset.id);
+        if (el.checked) checked.add(id); else checked.delete(id);
+    }
+
+    async function loadPending(page, size) {
+        const res = await fetch(`${BASE_URL}/pending/list`); // 或分页接口
+        pendingList = await res.json();
+        const body = document.getElementById('tbbody');
+        body.innerHTML = '';
+        pendingList.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.className = colorClass(p.confidence);
+            const aliasesText = Array.isArray(p.aliases) ? p.aliases.join(',') : (p.aliases || '');
+            tr.innerHTML = `
+      <td><input class="chk" data-id="${p.id}" type="checkbox" onchange="toggleOne(this)"/></td>
+      <td>${p.id}</td>
+      <td>${p.originalField}</td>
+      <td>${p.aiCanonicalField}</td>
+      <td>${(p.confidence || '').toFixed ? (p.confidence || 0).toFixed(2) : (p.confidence || '')}</td>
+      <td>${aliasesText}</td>
+      <td>${p.status}</td>
+      <td>
+        <button onclick="openModal(${p.id})" class="btn">查看/编辑</button>
+        <button onclick="approveSingle(${p.id})" class="btn">通过</button>
+        <button onclick="rejectSingle(${p.id})" class="btn">驳回</button>
+      </td>
+    `;
+            body.appendChild(tr);
+        });
+    }
+
+    function openModal(id) {
+        const p = pendingList.find(x => x.id === id);
+        if (!p) return;
+        document.getElementById('m_id').value = p.id;
+        document.getElementById('m_original').innerText = p.originalField;
+        document.getElementById('m_canonical').value = p.aiCanonicalField || '';
+        document.getElementById('m_desc').value = p.canonicalFieldDescription || '';
+        document.getElementById('m_aliases').value = JSON.stringify(p.aliases || []);
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('modal').style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    async function saveEdits() {
+        const id = parseInt(document.getElementById('m_id').value);
+        const payload = {
+            id: id,
+            aiCanonicalField: document.getElementById('m_canonical').value,
+            canonicalFieldDescription: document.getElementById('m_desc').value,
+            aliases: JSON.parse(document.getElementById('m_aliases').value)
+        };
+
+
+        const res = await fetch(`${BASE_URL}/pending/update`, {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            alert('保存成功');
+            closeModal();
+            loadPending(1,20);
+        } else {
+            alert('保存失败');
+        }
+    }
+
+    async function approveWithEdits() {
+        const id = parseInt(document.getElementById('m_id').value);
+        const payload = {
+            id: id,
+            aiCanonicalField: document.getElementById('m_canonical').value,
+            canonicalFieldDescription: document.getElementById('m_desc').value,
+            aliases: JSON.parse(document.getElementById('m_aliases').value)
+        };
+        const res = await fetch(`${BASE_URL}/pending/approveWithEdits`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            alert('保存并通过成功');
+            closeModal();
+            loadPending(1,20);
+        } else {
+            alert('操作失败');
+        }
+    }
+
+    async function approveSingle(id) {
+        const res = await fetch(`${BASE_URL}/pending/approve?id=${id}`, { method:'POST' });
+        if (res.ok) { alert('通过成功'); loadPending(1,20); } else alert('失败');
+    }
+
+    async function rejectSingle(id) {
+        const res = await fetch(`${BASE_URL}/pending/reject?id=${id}`, { method:'POST' });
+        if (res.ok) { alert('驳回成功'); loadPending(1,20); } else alert('失败');
+    }
+
+    async function batchApprove() {
+        if (checked.size === 0) { alert('请选择要通过的记录'); return; }
+        const ids = Array.from(checked);
+        const res = await fetch(`${BASE_URL}/pending/batchApprove`, {
+            method:'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(ids)
+        });
+        if (res.ok) { alert('批量通过成功'); checked.clear(); loadPending(1,20); } else alert('失败');
+    }
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => { loadPending(1,20); });
+</script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiassistant.mapper.KbPendingMapper">
+
+    <resultMap id="KbPendingResultMap" type="com.aiassistant.domain.KbPending">
+        <id property="id" column="id"/>
+        <result property="originalField" column="original_field"/>
+        <result property="aiCanonicalField" column="ai_canonical_field"/>
+        <result property="canonicalFieldDescription" column="canonical_field_description"/>
+        <result property="reason" column="reason"/>
+        <result property="confidence" column="confidence"/>
+        <result property="aliases" column="aliases" javaType="java.util.List"
+                typeHandler="com.aiassistant.common.JsonArrayTypeHandler"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="autoApproved" column="auto_approved"/>
+        <result property="approveTime" column="approve_time"/>
+    </resultMap>
+
+    <select id="listPending" resultMap="KbPendingResultMap">
+        SELECT * FROM kb_pending WHERE status='PENDING' ORDER BY create_time DESC
+    </select>
+
+    <select id="selectAllPending" resultMap="KbPendingResultMap">
+        SELECT * FROM kb_pending WHERE status='PENDING' ORDER BY create_time DESC
+    </select>
+
+    <select id="selectById" parameterType="long" resultMap="KbPendingResultMap">
+        SELECT * FROM kb_pending WHERE id=#{id}
+    </select>
+
+    <update id="update" parameterType="com.aiassistant.domain.KbPending">
+        UPDATE kb_pending
+        SET status=#{status},
+            update_time=#{updateTime},
+            auto_approved=#{autoApproved},
+            approve_time=#{approveTime}
+        WHERE id=#{id}
+    </update>
+
+    <select id="countByOriginalAndAiField" resultType="int">
+        SELECT COUNT(*) FROM kb_pending
+        WHERE original_field=#{originalField}
+          AND ai_canonical_field=#{aiCanonicalField}
+    </select>
+
+    <insert id="insert" parameterType="com.aiassistant.domain.KbPending" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_pending (
+            original_field, ai_canonical_field, canonical_field_description,
+            reason, confidence, aliases, status, create_time, update_time, auto_approved, approve_time
+        ) VALUES (
+                     #{originalField}, #{aiCanonicalField}, #{canonicalFieldDescription},
+                     #{reason}, #{confidence}, #{aliases, jdbcType=OTHER, typeHandler=com.aiassistant.common.JsonArrayTypeHandler},
+                     #{status}, #{createTime}, #{updateTime}, #{autoApproved}, #{approveTime}
+                 )
+    </insert>
+
+    <!-- 分页 -->
+    <select id="selectPendingPage" resultMap="KbPendingResultMap">
+        SELECT * FROM kb_pending
+        WHERE status='PENDING'
+        ORDER BY create_time DESC
+            LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+
+
+    <select id="countByStatusAndQuery" resultType="int">
+        SELECT COUNT(*) FROM kb_pending
+        <where>
+            <if test="status != null and status != ''">
+                status = #{status}
+            </if>
+            <if test="q != null and q != ''">
+                AND (original_field LIKE CONCAT('%', #{q}, '%')
+                OR ai_canonical_field LIKE CONCAT('%', #{q}, '%')
+                OR canonical_field_description LIKE CONCAT('%', #{q}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <!-- 更新部分字段（编辑保存） -->
+    <update id="updatePending" parameterType="com.aiassistant.domain.KbPending">
+        UPDATE kb_pending
+        SET
+            ai_canonical_field = #{aiCanonicalField},
+            canonical_field_description = #{canonicalFieldDescription},
+            reason = #{reason},
+            confidence = #{confidence},
+            status = #{status},
+            aliases = #{aliases, jdbcType=OTHER, typeHandler=com.aiassistant.common.JsonArrayTypeHandler},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 更新状态（保留原 updateStatus 或实现如下） -->
+    <update id="updateStatus" parameterType="map">
+        UPDATE kb_pending
+        SET status = #{status}, update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 自动审核更新 -->
+    <update id="updateAutoApproveStatus">
+        UPDATE kb_pending
+        SET
+            status = 'APPROVED',
+            auto_approved = 1,
+            approve_time = NOW(),
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <!-- 查询 confidence >= threshold 的记录 -->
+    <select id="selectPendingByConfidence" resultMap="KbPendingResultMap">
+        SELECT * FROM kb_pending
+        WHERE status = 'PENDING' AND confidence <![CDATA[ >= ]]> #{threshold}
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*) FROM kb_pending WHERE status=#{status}
+    </select>
+    <select id="selectPendingOrderedByConfidence" resultMap="KbPendingResultMap">
+        SELECT * FROM kb_pending WHERE status='PENDING' ORDER BY confidence DESC, create_time DESC LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>
