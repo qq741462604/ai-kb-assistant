@@ -37,4 +37,3 @@ build/
 
 # LLM key / local secrets
 application-local.yml
-.env
